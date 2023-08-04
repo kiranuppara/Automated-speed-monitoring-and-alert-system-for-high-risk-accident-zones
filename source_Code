@@ -1,0 +1,220 @@
+//code contributed by U SAI KIRAN -https://github.com/kiranuppara/Automated-speed-monitoring-and-alert-system-for-high-risk-accidemt-zones/new/main //
+
+#include <TinyGPS++.h>
+#include <SoftwareSerial.h>
+#include <LiquidCrystal_I2C.h>
+SoftwareSerial GPS_SoftSerial(4, 3);/* (Rx, Tx) */
+/* Create an object named gps of the class TinyGPSPlus */
+TinyGPSPlus gps;   
+//lcd for priting co-ordinates
+LiquidCrystal_I2C lcd (0x27, 16, 2);
+
+volatile float minutes, seconds;
+volatile int degree, secs, mins;
+// double laat=13.630301,lang=79.395317;
+//defination of varibles for ultra sonic sensor
+
+//defination of varibles for ir sensor
+long duration;
+int distance;
+const byte PulsesPerRevolution = 2;
+const unsigned long ZeroTimeout = 100000;
+const byte numReadings = 2;
+volatile unsigned long LastTimeWeMeasured;
+volatile unsigned long PeriodBetweenPulses = ZeroTimeout + 1000;
+volatile unsigned long PeriodAverage = ZeroTimeout + 1000;
+unsigned long FrequencyRaw;
+unsigned long FrequencyReal;
+unsigned long RPM;
+unsigned int PulseCounter = 1;
+unsigned long PeriodSum;
+const int buzzerpin=9;
+const int LED=12;
+unsigned long LastTimeCycleMeasure = LastTimeWeMeasured;
+unsigned long CurrentMicros = micros();
+unsigned int AmountOfReadings = 1;
+unsigned int ZeroDebouncingExtra;
+unsigned long readings[numReadings];
+unsigned long readIndex;  
+unsigned long total; 
+unsigned long average;
+int speeds;
+/*defination of varibles for GPS module and gps tracking
+/* Create object named bt of the class SoftwareSerial */
+   
+
+
+
+
+void setup() {
+  GPS_SoftSerial.begin(9600); // Define baud rate for software serial communication 
+  Serial.begin(9600); // Define baud rate for software serial communication 
+// pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output:which transfers waves to objects
+//  pinMode(echoPin, INPUT); //Sets the echo pin as INPUT:which recives transfered wavers from the objecrs
+  attachInterrupt(digitalPinToInterrupt(2), Pulse_Event, RISING);
+  delay(1000);
+  pinMode(buzzerpin,OUTPUT);//buzzerpin i.e 9 pin set as output so we are going give high signal to the pin
+  pinMode(LED,OUTPUT);
+
+}
+void loop() {
+     smartDelay(1000); /* Generate precise delay of 1ms */
+        unsigned long start;
+        double lat_val, lng_val, alt_m_val;
+        uint8_t hr_val, min_val, sec_val;
+        bool loc_valid, alt_valid, time_valid;
+        lat_val = gps.location.lat(); /* Get latitude data */
+        loc_valid = gps.location.isValid(); /* Check if valid location data is available */
+        lng_val = gps.location.lng(); /* Get longtitude data */
+        alt_m_val = gps.altitude.meters();  /* Get altitude data in meters */
+        alt_valid = gps.altitude.isValid(); /* Check if valid altitude data is available */
+        hr_val = gps.time.hour(); /* Get hour */
+        min_val = gps.time.minute();  /* Get minutes */
+        sec_val = gps.time.second();  /* Get seconds */
+        time_valid = gps.time.isValid();  /* Check if valid time data is available */
+        if (!loc_valid)
+        {          
+          Serial.print("Latitude : ");
+          Serial.println("*****");
+          Serial.print("Longitude : ");
+          Serial.println("*****");
+        }
+        else
+        {
+          Serial.println();
+          DegMinSec(lat_val);
+          Serial.print("Latitude in Decimal Degrees : ");
+          Serial.println(lat_val, 6);
+               DegMinSec(lng_val); /* Convert the decimal degree value into degrees minutes seconds form */
+          Serial.print("Longitude in Decimal Degrees : ");
+          Serial.println(lng_val, 6);
+         
+        }
+
+
+  
+  //ir sensor code
+  LastTimeCycleMeasure = LastTimeWeMeasured;
+  CurrentMicros = micros();
+  if (CurrentMicros < LastTimeCycleMeasure) {
+    LastTimeCycleMeasure = CurrentMicros;
+  }
+  FrequencyRaw = 10000000000 / PeriodAverage;
+  if (PeriodBetweenPulses > ZeroTimeout - ZeroDebouncingExtra || CurrentMicros - LastTimeCycleMeasure > ZeroTimeout - ZeroDebouncingExtra) {
+    FrequencyRaw = 0;  // Set frequency as 0.
+    ZeroDebouncingExtra = 2000;
+  } else {
+    ZeroDebouncingExtra = 0;
+  }
+  FrequencyReal = FrequencyRaw / 10000;
+
+  RPM = FrequencyRaw / PulsesPerRevolution * 60;
+  RPM = RPM / 10000;
+  total = total - readings[readIndex];
+  readings[readIndex] = RPM;
+  total = total + readings[readIndex];
+  readIndex = readIndex + 1;
+
+  if (readIndex >= numReadings) {
+    readIndex = 0;
+  }
+  average = total / numReadings;
+
+speeds=2*RPM*0.001885;
+//speeding checking
+    if(speeds>20){
+      tone(buzzerpin, 1000); 
+      digitalWrite(LED, HIGH);// Play the note C4 for 200ms
+  delay(200);
+  noTone(buzzerpin);
+  digitalWrite(LED, LOW);
+  delay(200);
+  }
+char buffer1[20] = "13.630301";
+char buffer2[20] ="13.630470";
+char buffer3[20] = "79.395317";
+char buffer4[20] ="79.395392";
+char bufferlat[20];
+char bufferlang[20];
+dtostrf(gps.location.lat(), 8, 6, bufferlat); // convert latitude to a string with 6 decimal places
+dtostrf(gps.location.lng(), 8, 6, bufferlang); // convert latitude to a string with 6 decimal places
+//Serial.println(buffer);
+
+if (strcmp(buffer1, bufferlat) <= 0 && strcmp(buffer2, bufferlat) >= 0){
+if(strcmp(buffer3, bufferlang) <= 0 && strcmp(buffer4, bufferlang) >= 0) {
+  Serial.println("Location matched");
+  if(speeds>40){
+      tone(buzzerpin, 1000); 
+      digitalWrite(LED, HIGH);// Play the note C4 for 200ms
+  delay(200);
+  noTone(buzzerpin);
+  digitalWrite(LED, LOW);
+  delay(200);
+  }
+}
+}else {
+  Serial.println("location not matched");
+}
+
+//  double latitude = ; // assume gps.location.lat() returns a double value
+//String s = String.format("%.6f", latitude);
+ 
+delay(1000);
+Serial.print("Period: ");
+  Serial.print(PeriodBetweenPulses);
+  Serial.print("\tReadings: ");
+  Serial.print(AmountOfReadings);
+  Serial.print("\tFrequency: ");
+  Serial.print(FrequencyReal);
+  Serial.print("\tRPM: ");
+  Serial.print(RPM);
+  Serial.print("\tTachometer: ");
+  Serial.print(average);  
+  Serial.print("\tSpeed: ");
+  Serial.print(speeds);
+    Serial.print("\tDistance: ");
+  Serial.print(distance);
+  
+//GPS code
+
+
+}
+
+void Pulse_Event() {
+  PeriodBetweenPulses = micros() - LastTimeWeMeasured;
+  LastTimeWeMeasured = micros();
+  if (PulseCounter >= AmountOfReadings)  {
+    PeriodAverage = PeriodSum / AmountOfReadings;
+    PulseCounter = 1;
+    PeriodSum = PeriodBetweenPulses;
+
+    int RemapedAmountOfReadings = map(PeriodBetweenPulses, 40000, 5000, 1, 10);
+    RemapedAmountOfReadings = constrain(RemapedAmountOfReadings, 1, 10);
+    AmountOfReadings = RemapedAmountOfReadings;
+  } else {
+    PulseCounter++;
+    PeriodSum = PeriodSum + PeriodBetweenPulses;
+  }
+}
+static void smartDelay(unsigned long ms)
+{
+  unsigned long start = millis();
+  do 
+  {
+    while (GPS_SoftSerial.available())  /* Encode data read from GPS while data is available on serial port */
+      gps.encode(GPS_SoftSerial.read());
+/* Encode basically is used to parse the string received by the GPS and to store it in a buffer so that information can be extracted from it */
+  } while (millis() - start < ms);
+}
+
+void DegMinSec( double tot_val)   /* Convert data in   decimal degrees into degrees minutes seconds form */
+{  
+  degree = (int)tot_val;
+  minutes = tot_val - degree;
+  seconds = 60 * minutes;
+  minutes = (int)seconds;
+  mins = (int)minutes;
+  seconds = seconds - minutes;
+  seconds = 60 * seconds;
+  secs = (int)seconds;
+}
